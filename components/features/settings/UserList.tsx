@@ -11,6 +11,7 @@ interface UserListProps {
   callerRole: UserRole
   onDeactivate: (userId: string) => Promise<string | undefined>
   onReactivate: (userId: string) => Promise<string | undefined>
+  onResetPin: (userId: string) => void
   loadingId: string | null
 }
 
@@ -116,6 +117,7 @@ function RowActions({
   currentUserId,
   onDeactivate,
   onReactivate,
+  onResetPin,
   loadingId,
   size,
 }: {
@@ -124,23 +126,23 @@ function RowActions({
   currentUserId: string
   onDeactivate: (id: string) => Promise<string | undefined>
   onReactivate: (id: string) => Promise<string | undefined>
+  onResetPin: (id: string) => void
   loadingId: string | null
   size: 'sm' | 'xs'
 }) {
   const [rowError, setRowError] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const action = getRowActions(user, callerRole, currentUserId)
+  const showResetPin = isOwner(callerRole) && user.id !== currentUserId && user.role !== 'owner'
 
-  if (action === 'none') return null
+  if (action === 'none' && !showResetPin) return null
 
   const px = size === 'sm' ? 'px-3 py-1.5' : 'px-3 py-1'
 
   async function handleDeactivateConfirm() {
     setRowError(null)
     const err = await onDeactivate(user.id)
-    if (err) {
-      setRowError(err)
-    }
+    if (err) setRowError(err)
     setModalOpen(false)
   }
 
@@ -182,6 +184,16 @@ function RowActions({
             {loadingId === user.id ? 'Working…' : 'Reactivate'}
           </button>
         )}
+        {showResetPin && (
+          <button
+            onClick={() => onResetPin(user.id)}
+            disabled={loadingId === user.id}
+            className={`rounded-lg ${px} text-xs font-medium transition-opacity disabled:opacity-40`}
+            style={{ border: '1px solid var(--primary)', color: 'var(--primary)', background: 'transparent' }}
+          >
+            Reset PIN
+          </button>
+        )}
       </div>
       {rowError && (
         <p className="text-[11px]" style={{ color: 'var(--coral)' }}>{rowError}</p>
@@ -190,7 +202,7 @@ function RowActions({
   )
 }
 
-export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, loadingId }: UserListProps) {
+export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, onResetPin, loadingId }: UserListProps) {
   const [showInactive, setShowInactive] = useState(false)
 
   const displayedUsers = showInactive ? users : users.filter((u) => u.status !== 'inactive')
@@ -246,6 +258,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
               currentUserId={currentUserId}
               onDeactivate={onDeactivate}
               onReactivate={onReactivate}
+              onResetPin={onResetPin}
               loadingId={loadingId}
               size="sm"
             />
@@ -302,6 +315,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
                       currentUserId={currentUserId}
                       onDeactivate={onDeactivate}
                       onReactivate={onReactivate}
+                      onResetPin={onResetPin}
                       loadingId={loadingId}
                       size="xs"
                     />
