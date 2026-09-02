@@ -1,4 +1,4 @@
-import { getArtists, getReleases } from '@/lib/labelgrid'
+import { getArtists, getReleases } from '@/lib/data'
 import ArtistsClient from '@/components/features/artists/ArtistsClient'
 
 export default async function ArtistsPage() {

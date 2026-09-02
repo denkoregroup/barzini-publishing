@@ -1,4 +1,4 @@
-import { getDistributionStatus, getSyncEvents } from '@/lib/labelgrid'
+import { getDistributionStatus, getSyncEvents } from '@/lib/data'
 import DistributionClient from '@/components/features/distribution/DistributionClient'
 
 export default async function DistributionPage() {

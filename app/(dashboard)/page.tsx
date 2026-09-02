@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getDisplayName } from '@/lib/utils'
-import { getRoyaltySummary, getReleases, getDistributionStatus, getArtists } from '@/lib/labelgrid'
+import { getRoyaltySummary, getReleases, getDistributionStatus, getArtists } from '@/lib/data'
 import DashboardOverview from '@/components/features/dashboard/DashboardOverview'
 
 export default async function DashboardPage() {

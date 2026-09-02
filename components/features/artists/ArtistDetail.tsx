@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Artist, Release, ReleaseInsight } from '@/lib/types'
 import Sheet from '@/components/ui/Sheet'
-import { getReleaseInsight } from '@/lib/labelgrid'
+import { getReleaseInsight } from '@/lib/data'
 
 interface ArtistDetailProps {
   artist: Artist

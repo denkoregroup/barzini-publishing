@@ -1,4 +1,4 @@
-import { getAnalyticsStreams, getStreamsTimeseries } from '@/lib/labelgrid'
+import { getAnalyticsStreams, getStreamsTimeseries } from '@/lib/data'
 import AnalyticsClient from '@/components/features/analytics/AnalyticsClient'
 
 export default async function AnalyticsPage() {

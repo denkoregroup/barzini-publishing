@@ -1,4 +1,4 @@
-import { getReleases } from '@/lib/labelgrid'
+import { getReleases } from '@/lib/data'
 import PipelineBoard from '@/components/features/releases/PipelineBoard'
 
 export default async function ReleasesPage() {

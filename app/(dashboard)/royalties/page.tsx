@@ -1,4 +1,4 @@
-import { getRoyaltySummary, getRoyaltyStatements, getArtists, getReleases } from '@/lib/labelgrid'
+import { getRoyaltySummary, getRoyaltyStatements, getArtists, getReleases } from '@/lib/data'
 import RoyaltiesClient from '@/components/features/royalties/RoyaltiesClient'
 
 export default async function RoyaltiesPage() {
