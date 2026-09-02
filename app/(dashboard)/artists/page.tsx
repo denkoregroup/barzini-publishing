@@ -4,11 +4,11 @@ import ArtistSwitcher from '@/components/features/shared/ArtistSwitcher'
 import ArtistsClient from '@/components/features/artists/ArtistsClient'
 
 interface ArtistsPageProps {
-  searchParams: Promise<{ artist?: string }>
+  searchParams: Promise<{ artist?: string; debug?: string }>
 }
 
 export default async function ArtistsPage({ searchParams }: ArtistsPageProps) {
-  const { artist: selectedArtistId } = await searchParams
+  const { artist: selectedArtistId, debug } = await searchParams
   const ctx = await getScopeContext()
 
   const [allArtists, allReleases] = await Promise.all([getArtists(), getReleases()])
@@ -28,6 +28,28 @@ export default async function ArtistsPage({ searchParams }: ArtistsPageProps) {
         </p>
         <h1 className="mt-0.5 text-2xl font-semibold text-white">Artist Roster</h1>
       </div>
+
+      {/* TEMPORARY diagnostic — visit ?debug=1 to see what the server computed
+          for this account. Remove once the switcher visibility issue is resolved. */}
+      {debug === '1' && (
+        <pre
+          className="text-xs whitespace-pre-wrap rounded-lg p-4"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--coral)', color: 'rgba(255,255,255,0.8)' }}
+        >
+{JSON.stringify(
+  {
+    role: ctx.role,
+    managerScoped: ctx.managerScoped,
+    managedArtistIds_fromAccount: ctx.managedArtistIds,
+    allArtistIds_fromMockData: allArtists.map((a) => a.id),
+    managedArtists_afterScoping: managedArtists.map((a) => ({ id: a.id, name: a.name })),
+    switcherShouldRender: ctx.managerScoped && managedArtists.length > 1,
+  },
+  null,
+  2,
+)}
+        </pre>
+      )}
 
       {ctx.managerScoped && (
         <ArtistSwitcher artists={managedArtists} selectedArtistId={selectedArtistId} />
