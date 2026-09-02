@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminOrAbove } from '@/lib/utils'
+import { findConflictingArtistOwners } from '@/lib/managerAssignments'
 
 // Updates the set of artist IDs a manager has oversight/reporting access to.
 // Restricted to admin-or-above — managers can never edit their own or anyone else's scope.
@@ -36,6 +37,19 @@ export async function POST(request: Request) {
   }
 
   const scopedArtistIds = managedArtistIds.filter((id) => typeof id === 'string')
+
+  // An artist can only be overseen by one manager at a time — exclude this
+  // manager's own existing assignments from the conflict check.
+  if (scopedArtistIds.length > 0) {
+    const { conflicts, ownerLabels } = await findConflictingArtistOwners(admin, scopedArtistIds, userId)
+    if (conflicts.length > 0) {
+      const detail = conflicts.map((id) => `${id} (already assigned to ${ownerLabels.get(id)})`).join(', ')
+      return NextResponse.json(
+        { error: `Some artists are already assigned to another manager: ${detail}` },
+        { status: 409 },
+      )
+    }
+  }
 
   const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
     user_metadata: { ...targetUser.user_metadata, managed_artist_ids: scopedArtistIds },

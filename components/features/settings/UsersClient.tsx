@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { UserPlus, X, AlertTriangle } from 'lucide-react'
 import type { Artist, UserRecord, UserRole } from '@/lib/types'
@@ -49,6 +49,35 @@ export default function UsersClient({ currentUserId, callerRole, artists }: User
 
   // Manager artist-assignment modal
   const [assignmentsTarget, setAssignmentsTarget] = useState<UserRecord | null>(null)
+
+  // An artist can only be overseen by one manager at a time. Until that's a real
+  // relation in the schema (tracked separately), enforce it here: map each
+  // already-assigned artist to the manager who holds it, so the invite form and
+  // the assignments modal can't offer an artist that's already claimed.
+  const artistOwner = useMemo(() => {
+    const map = new Map<string, string>() // artistId -> managing user's id
+    for (const u of users) {
+      if (u.role !== 'manager') continue
+      for (const id of u.managedArtistIds ?? []) map.set(id, u.id)
+    }
+    return map
+  }, [users])
+
+  // New managers can only pick from artists nobody else already manages.
+  const artistsForInvite = useMemo(
+    () => artists.filter((a) => !artistOwner.has(a.id)),
+    [artists, artistOwner],
+  )
+
+  // Editing an existing manager's scope: hide artists claimed by *other*
+  // managers, but keep this manager's own current assignments selectable.
+  const artistsForAssignments = useMemo(() => {
+    if (!assignmentsTarget) return artists
+    return artists.filter((a) => {
+      const owner = artistOwner.get(a.id)
+      return !owner || owner === assignmentsTarget.id
+    })
+  }, [artists, artistOwner, assignmentsTarget])
 
   function showToast(message: string, type: 'success' | 'error') {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -238,12 +267,12 @@ export default function UsersClient({ currentUserId, callerRole, artists }: User
         open={showInvite}
         onClose={() => setShowInvite(false)}
         onSuccess={handleInviteSuccess}
-        artists={artists}
+        artists={artistsForInvite}
       />
 
       <ManageAssignmentsModal
         target={assignmentsTarget}
-        artists={artists}
+        artists={artistsForAssignments}
         onClose={() => setAssignmentsTarget(null)}
         onSave={handleAssignmentsSave}
       />

@@ -48,8 +48,17 @@ export default function InviteEmail({
             <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 6px' }}>
               Temporary PIN
             </Text>
-            <Text style={{ color: '#3DDBBD', fontSize: '32px', fontFamily: 'monospace', fontWeight: 500, letterSpacing: '0.2em', margin: '0 0 24px' }}>
-              {tempPin}
+            <Section style={{ background: '#0f0f17', border: '1px solid rgba(61,219,189,0.25)', borderRadius: '8px', padding: '14px 18px', margin: '0 0 8px' }}>
+              {/* No letter-spacing here — some mail clients (notably desktop Outlook) can
+                  paste wide letter-spacing as literal extra spaces, which would break the PIN
+                  on copy/paste. Isolated in its own box with nothing else so a tap-to-select
+                  or triple-click grabs exactly these digits. */}
+              <Text style={{ color: '#3DDBBD', fontSize: '32px', fontFamily: 'monospace', fontWeight: 500, margin: 0, textAlign: 'center' }}>
+                {tempPin}
+              </Text>
+            </Section>
+            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: '12px', margin: '0 0 24px' }}>
+              Tap and hold (or triple-click) the PIN above to select and copy it.
             </Text>
             <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', lineHeight: '1.6', margin: '0 0 24px' }}>
               You&apos;ll be asked to create a new PIN when you first sign in. Keep this temporary PIN secure and do not share it.

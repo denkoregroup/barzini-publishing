@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from "@/lib/supabase/admin"
 import { generateTempPin, getDisplayName, isAdminOrAbove } from '@/lib/utils'
+import { findConflictingArtistOwners } from '@/lib/managerAssignments'
 import { Resend } from 'resend'
 import InviteEmail from '@/components/emails/InviteEmail'
 
@@ -31,8 +32,21 @@ export async function POST(request: Request) {
     ? managedArtistIds.filter((id) => typeof id === 'string')
     : []
 
-  const tempPin = generateTempPin()
   const admin = createAdminClient()
+
+  // An artist can only be overseen by one manager at a time.
+  if (scopedArtistIds.length > 0) {
+    const { conflicts, ownerLabels } = await findConflictingArtistOwners(admin, scopedArtistIds)
+    if (conflicts.length > 0) {
+      const detail = conflicts.map((id) => `${id} (already assigned to ${ownerLabels.get(id)})`).join(', ')
+      return NextResponse.json(
+        { error: `Some artists are already assigned to another manager: ${detail}` },
+        { status: 409 },
+      )
+    }
+  }
+
+  const tempPin = generateTempPin()
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
