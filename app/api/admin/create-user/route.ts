@@ -15,16 +15,21 @@ export async function POST(request: Request) {
   }
 
   const inviterName = getDisplayName({ email: user.email ?? undefined, user_metadata: user.user_metadata })
-  const body = await request.json() as { email?: string; displayName?: string; role?: string }
-  const { email, displayName, role = 'user' } = body
+  const body = await request.json() as { email?: string; displayName?: string; role?: string; managedArtistIds?: string[] }
+  const { email, displayName, role = 'user', managedArtistIds } = body
 
   if (!email || !displayName) {
     return NextResponse.json({ error: 'email and displayName are required.' }, { status: 400 })
   }
 
-  if (role !== 'admin' && role !== 'user') {
-    return NextResponse.json({ error: 'Invalid role. Must be admin or user.' }, { status: 400 })
+  if (role !== 'admin' && role !== 'manager' && role !== 'user') {
+    return NextResponse.json({ error: 'Invalid role. Must be admin, manager, or user.' }, { status: 400 })
   }
+
+  // Manager accounts are scoped by assigned artists. Non-managers never carry this field.
+  const scopedArtistIds = role === 'manager' && Array.isArray(managedArtistIds)
+    ? managedArtistIds.filter((id) => typeof id === 'string')
+    : []
 
   const tempPin = generateTempPin()
   const admin = createAdminClient()
@@ -35,6 +40,7 @@ export async function POST(request: Request) {
     user_metadata: {
       display_name: displayName,
       role,
+      managed_artist_ids: scopedArtistIds,
       pin_set: false,
       force_pin_change: true,
       active: true,
@@ -54,6 +60,7 @@ export async function POST(request: Request) {
       email,
       display_name: displayName,
       role,
+      managed_artist_ids: scopedArtistIds,
       status: 'active',
       pin_set: false,
       force_pin_change: true,

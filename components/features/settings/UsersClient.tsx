@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { UserPlus, X, AlertTriangle } from 'lucide-react'
-import type { UserRecord, UserRole } from '@/lib/types'
+import type { Artist, UserRecord, UserRole } from '@/lib/types'
 import UserList from '@/components/features/settings/UserList'
 import InviteUserForm from '@/components/features/settings/InviteUserForm'
+import ManageAssignmentsModal from '@/components/features/settings/ManageAssignmentsModal'
 import PinShare from '@/components/shared/PinShare'
 import { deactivateUser, reactivateUser } from '@/app/actions/users'
 
@@ -23,9 +24,10 @@ interface Toast {
 interface UsersClientProps {
   currentUserId: string
   callerRole: UserRole
+  artists: Artist[]
 }
 
-export default function UsersClient({ currentUserId, callerRole }: UsersClientProps) {
+export default function UsersClient({ currentUserId, callerRole, artists }: UsersClientProps) {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -44,6 +46,9 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
   const [pinRevealOpen, setPinRevealOpen] = useState(false)
   const [revealedPin, setRevealedPin] = useState('')
   const [pinRevealTarget, setPinRevealTarget] = useState<UserRecord | null>(null)
+
+  // Manager artist-assignment modal
+  const [assignmentsTarget, setAssignmentsTarget] = useState<UserRecord | null>(null)
 
   function showToast(message: string, type: 'success' | 'error') {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -134,6 +139,25 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
     }
   }
 
+  async function handleAssignmentsSave(userId: string, ids: string[]): Promise<string | undefined> {
+    try {
+      const res = await fetch('/api/admin/update-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, managedArtistIds: ids }),
+      })
+      const data = await res.json() as { ok?: boolean; error?: string }
+      if (!res.ok) return data.error ?? 'Failed to update assignments.'
+      setUsers((prev) =>
+        prev.map((u) => u.id === userId ? { ...u, managedArtistIds: ids } : u)
+      )
+      showToast('Artist assignments updated.', 'success')
+      setAssignmentsTarget(null)
+    } catch {
+      return 'Failed to update assignments.'
+    }
+  }
+
   function handleInviteSuccess(pin: string, displayName: string, emailWarning?: string) {
     setShowInvite(false)
     setTempPin({ pin, displayName, emailWarning })
@@ -205,6 +229,7 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
           onDeactivate={handleDeactivate}
           onReactivate={handleReactivate}
           onResetPin={handleResetPinClick}
+          onEditAssignments={setAssignmentsTarget}
           loadingId={loadingId}
         />
       )}
@@ -213,6 +238,14 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
         open={showInvite}
         onClose={() => setShowInvite(false)}
         onSuccess={handleInviteSuccess}
+        artists={artists}
+      />
+
+      <ManageAssignmentsModal
+        target={assignmentsTarget}
+        artists={artists}
+        onClose={() => setAssignmentsTarget(null)}
+        onSave={handleAssignmentsSave}
       />
 
       {/* Reset PIN — confirmation modal */}

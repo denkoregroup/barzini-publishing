@@ -30,6 +30,13 @@ export function isAdminOrAbove(role?: string): boolean {
   return role === 'owner' || role === 'admin'
 }
 
+// Owner, admin, or manager — used for gating financial/royalty oversight views.
+// Note: this is intentionally separate from isAdminOrAbove, which gates user-management
+// actions (invite/deactivate/reactivate/reset PIN). Managers never pass isAdminOrAbove.
+export function isManagerOrAbove(role?: string): boolean {
+  return role === 'owner' || role === 'admin' || role === 'manager'
+}
+
 export function isOwner(role?: string): boolean {
   return role === 'owner'
 }

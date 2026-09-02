@@ -1,0 +1,807 @@
+diff --git a/app/(dashboard)/royalties/page.tsx b/app/(dashboard)/royalties/page.tsx
+index 6916e2a..9000d89 100644
+--- a/app/(dashboard)/royalties/page.tsx
++++ b/app/(dashboard)/royalties/page.tsx
+@@ -1,22 +1,112 @@
++import { redirect } from 'next/navigation'
++import { createClient } from '@/lib/supabase/server'
++import { isManagerOrAbove, isAdminOrAbove } from '@/lib/utils'
++import type { Artist, PlatformRevenue, Release, RoyaltyStatement, RoyaltySummary } from '@/lib/types'
+ import { getRoyaltySummary, getRoyaltyStatements, getArtists, getReleases } from '@/lib/labelgrid'
+ import RoyaltiesClient from '@/components/features/royalties/RoyaltiesClient'
+ 
++// Builds a manager-scoped summary directly from the artists/statements they're assigned to,
++// rather than exposing label-wide totals. This is an oversight/reporting view, not the full ledger.
++function buildScopedSummary(
++  statements: RoyaltyStatement[],
++  artists: Artist[],
++  days: 30 | 90 | 365,
++): RoyaltySummary {
++  const totalRevenue = statements.reduce((sum, s) => sum + s.grossRevenue, 0)
++  const artistRoyaltiesOwed = statements.reduce((sum, s) => sum + s.royaltyOwed, 0)
++  const pendingPayouts = statements
++    .filter((s) => s.status !== 'paid')
++    .reduce((sum, s) => sum + s.royaltyOwed, 0)
++  const labelRetained = Math.max(totalRevenue - artistRoyaltiesOwed, 0)
++
++  const platformMap = new Map<string, PlatformRevenue>()
++  for (const s of statements) {
++    for (const p of s.platforms) {
++      const cur = platformMap.get(p.platform) ?? { platform: p.platform, revenue: 0, streams: 0 }
++      cur.revenue += p.revenue
++      cur.streams += p.streams
++      platformMap.set(p.platform, cur)
++    }
++  }
++
++  const topArtists = artists
++    .map((a) => {
++      const owed = statements
++        .filter((s) => s.artistId === a.id)
++        .reduce((sum, s) => sum + s.royaltyOwed, 0)
++      return {
++        artistId: a.id,
++        artistName: a.name,
++        initials: a.initials,
++        splitPercentage: a.splitPercentage,
++        releaseCount: a.releaseCount,
++        royaltyOwed: owed,
++        deltaPercent: 0,
++      }
++    })
++    .filter((a) => a.royaltyOwed > 0)
++    .sort((a, b) => b.royaltyOwed - a.royaltyOwed)
++
++  return {
++    totalRevenue,
++    artistRoyaltiesOwed,
++    pendingPayouts,
++    labelRetained,
++    periodDays: days,
++    revenueByPlatform: [...platformMap.values()],
++    topArtists,
++  }
++}
++
+ export default async function RoyaltiesPage() {
+-  const [summary30, summary90, summary365, statements, artists, releases] = await Promise.all([
+-    getRoyaltySummary(30),
+-    getRoyaltySummary(90),
+-    getRoyaltySummary(365),
+-    getRoyaltyStatements(),
++  const supabase = await createClient()
++  const { data: { user } } = await supabase.auth.getUser()
++  const role = user?.user_metadata?.role as string | undefined
++
++  // Defense in depth — proxy.ts already blocks non-manager/admin/owner roles from this route.
++  if (!user || !isManagerOrAbove(role)) {
++    redirect('/')
++  }
++
++  const managerScoped = !isAdminOrAbove(role) // true only for role === 'manager'
++  const managedArtistIds: string[] = Array.isArray(user.user_metadata?.managed_artist_ids)
++    ? user.user_metadata.managed_artist_ids
++    : []
++
++  const [allArtists, allReleases, allStatements] = await Promise.all([
+     getArtists(),
+     getReleases(),
++    getRoyaltyStatements(),
+   ])
+ 
++  let artists: Artist[] = allArtists
++  let releases: Release[] = allReleases
++  let statements: RoyaltyStatement[] = allStatements
++  let summary30: RoyaltySummary
++  let summary90: RoyaltySummary
++  let summary365: RoyaltySummary
++
++  if (managerScoped) {
++    artists = allArtists.filter((a) => managedArtistIds.includes(a.id))
++    releases = allReleases.filter((r) => managedArtistIds.includes(r.artistId))
++    statements = allStatements.filter((s) => managedArtistIds.includes(s.artistId))
++    summary30 = buildScopedSummary(statements, artists, 30)
++    summary90 = buildScopedSummary(statements, artists, 90)
++    summary365 = buildScopedSummary(statements, artists, 365)
++  } else {
++    [summary30, summary90, summary365] = await Promise.all([
++      getRoyaltySummary(30),
++      getRoyaltySummary(90),
++      getRoyaltySummary(365),
++    ])
++  }
++
+   return (
+     <div className="flex flex-col gap-6 min-w-0">
+       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+         <div className="min-w-0">
+           <p className="text-xs text-white/40 uppercase tracking-wider font-medium">
+-            Label overview
++            {managerScoped ? 'Manager oversight — assigned artists only' : 'Label overview'}
+           </p>
+           <h1 className="mt-0.5 text-2xl font-semibold text-white">Royalties</h1>
+         </div>
+diff --git a/app/(dashboard)/settings/users/page.tsx b/app/(dashboard)/settings/users/page.tsx
+index ef65907..2a03f0e 100644
+--- a/app/(dashboard)/settings/users/page.tsx
++++ b/app/(dashboard)/settings/users/page.tsx
+@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
+ import { redirect } from 'next/navigation'
+ import { isAdminOrAbove } from '@/lib/utils'
+ import { type UserRole } from '@/lib/types'
++import { getArtists } from '@/lib/labelgrid'
+ import UsersClient from '@/components/features/settings/UsersClient'
+ 
+ export default async function UsersPage() {
+@@ -13,6 +14,8 @@ export default async function UsersPage() {
+     redirect('/')
+   }
+ 
++  const artists = await getArtists()
++
+   return (
+     <div className="flex flex-col gap-6 min-w-0">
+       <div className="min-w-0">
+@@ -25,7 +28,7 @@ export default async function UsersPage() {
+         <h1 className="mt-1 text-2xl font-semibold text-white">User management</h1>
+       </div>
+ 
+-      <UsersClient currentUserId={user.id} callerRole={role as UserRole} />
++      <UsersClient currentUserId={user.id} callerRole={role as UserRole} artists={artists} />
+     </div>
+   )
+ }
+diff --git a/app/api/admin/create-user/route.ts b/app/api/admin/create-user/route.ts
+index 00ed3f0..36915cb 100644
+--- a/app/api/admin/create-user/route.ts
++++ b/app/api/admin/create-user/route.ts
+@@ -15,17 +15,22 @@ export async function POST(request: Request) {
+   }
+ 
+   const inviterName = getDisplayName({ email: user.email ?? undefined, user_metadata: user.user_metadata })
+-  const body = await request.json() as { email?: string; displayName?: string; role?: string }
+-  const { email, displayName, role = 'user' } = body
++  const body = await request.json() as { email?: string; displayName?: string; role?: string; managedArtistIds?: string[] }
++  const { email, displayName, role = 'user', managedArtistIds } = body
+ 
+   if (!email || !displayName) {
+     return NextResponse.json({ error: 'email and displayName are required.' }, { status: 400 })
+   }
+ 
+-  if (role !== 'admin' && role !== 'user') {
+-    return NextResponse.json({ error: 'Invalid role. Must be admin or user.' }, { status: 400 })
++  if (role !== 'admin' && role !== 'manager' && role !== 'user') {
++    return NextResponse.json({ error: 'Invalid role. Must be admin, manager, or user.' }, { status: 400 })
+   }
+ 
++  // Manager accounts are scoped by assigned artists. Non-managers never carry this field.
++  const scopedArtistIds = role === 'manager' && Array.isArray(managedArtistIds)
++    ? managedArtistIds.filter((id) => typeof id === 'string')
++    : []
++
+   const tempPin = generateTempPin()
+   const admin = createAdminClient()
+ 
+@@ -35,6 +40,7 @@ export async function POST(request: Request) {
+     user_metadata: {
+       display_name: displayName,
+       role,
++      managed_artist_ids: scopedArtistIds,
+       pin_set: false,
+       force_pin_change: true,
+       active: true,
+@@ -54,6 +60,7 @@ export async function POST(request: Request) {
+       email,
+       display_name: displayName,
+       role,
++      managed_artist_ids: scopedArtistIds,
+       status: 'active',
+       pin_set: false,
+       force_pin_change: true,
+diff --git a/app/api/admin/get-users/route.ts b/app/api/admin/get-users/route.ts
+index 16ac119..c1e2d77 100644
+--- a/app/api/admin/get-users/route.ts
++++ b/app/api/admin/get-users/route.ts
+@@ -33,6 +33,7 @@ export async function GET() {
+       status,
+       createdAt: u.created_at,
+       lastSignInAt: u.last_sign_in_at ?? undefined,
++      managedArtistIds: Array.isArray(meta.managed_artist_ids) ? meta.managed_artist_ids : undefined,
+     }
+   })
+ 
+diff --git a/app/api/admin/update-assignments/route.ts b/app/api/admin/update-assignments/route.ts
+new file mode 100644
+index 0000000..93a35f8
+--- /dev/null
++++ b/app/api/admin/update-assignments/route.ts
+@@ -0,0 +1,58 @@
++import { NextResponse } from 'next/server'
++import { createClient } from '@/lib/supabase/server'
++import { createAdminClient } from '@/lib/supabase/admin'
++import { isAdminOrAbove } from '@/lib/utils'
++
++// Updates the set of artist IDs a manager has oversight/reporting access to.
++// Restricted to admin-or-above — managers can never edit their own or anyone else's scope.
++export async function POST(request: Request) {
++  const supabase = await createClient()
++  const { data: { user } } = await supabase.auth.getUser()
++
++  const callerRole = user?.user_metadata?.role as string | undefined
++  if (!user || !isAdminOrAbove(callerRole)) {
++    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
++  }
++
++  const body = await request.json() as { userId?: string; managedArtistIds?: string[] }
++  const { userId, managedArtistIds } = body
++
++  if (!userId || !Array.isArray(managedArtistIds)) {
++    return NextResponse.json({ error: 'userId and managedArtistIds are required.' }, { status: 400 })
++  }
++
++  const admin = createAdminClient()
++  const { data: targetData, error: fetchError } = await admin.auth.admin.getUserById(userId)
++
++  if (fetchError || !targetData.user) {
++    return NextResponse.json({ error: 'User not found.' }, { status: 404 })
++  }
++
++  const targetUser = targetData.user
++  const targetRole = targetUser.user_metadata?.role as string | undefined
++
++  if (targetRole !== 'manager') {
++    return NextResponse.json({ error: 'Artist assignments only apply to manager accounts.' }, { status: 400 })
++  }
++
++  const scopedArtistIds = managedArtistIds.filter((id) => typeof id === 'string')
++
++  const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
++    user_metadata: { ...targetUser.user_metadata, managed_artist_ids: scopedArtistIds },
++  })
++
++  if (updateError) {
++    return NextResponse.json({ error: updateError.message }, { status: 400 })
++  }
++
++  const { error: profileError } = await admin
++    .from('profiles')
++    .update({ managed_artist_ids: scopedArtistIds })
++    .eq('id', userId)
++
++  if (profileError) {
++    console.error('Profile assignment sync failed:', profileError)
++  }
++
++  return NextResponse.json({ ok: true, managedArtistIds: scopedArtistIds })
++}
+diff --git a/components/features/settings/InviteUserForm.tsx b/components/features/settings/InviteUserForm.tsx
+index db1e9c1..aaa68bf 100644
+--- a/components/features/settings/InviteUserForm.tsx
++++ b/components/features/settings/InviteUserForm.tsx
+@@ -2,30 +2,47 @@
+ 
+ import { useState } from 'react'
+ import Sheet from '@/components/ui/Sheet'
+-import type { UserRole } from '@/lib/types'
++import type { Artist, UserRole } from '@/lib/types'
+ 
+ interface InviteUserFormProps {
+   open: boolean
+   onClose: () => void
+   onSuccess: (tempPin: string, displayName: string, emailWarning?: string) => void
++  artists: Artist[]
+ }
+ 
+-export default function InviteUserForm({ open, onClose, onSuccess }: InviteUserFormProps) {
++export default function InviteUserForm({ open, onClose, onSuccess, artists }: InviteUserFormProps) {
+   const [displayName, setDisplayName] = useState('')
+   const [email, setEmail] = useState('')
+   const [role, setRole] = useState<UserRole>('user')
++  const [managedArtistIds, setManagedArtistIds] = useState<string[]>([])
+   const [error, setError] = useState<string | null>(null)
+   const [loading, setLoading] = useState(false)
+ 
++  function toggleArtist(id: string) {
++    setManagedArtistIds((prev) =>
++      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
++    )
++  }
++
+   async function handleSubmit(e: React.FormEvent) {
+     e.preventDefault()
+     setError(null)
++    if (role === 'manager' && managedArtistIds.length === 0) {
++      setError('Select at least one artist for this manager to oversee.')
++      return
++    }
+     setLoading(true)
+     try {
+       const res = await fetch('/api/admin/create-user', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ displayName, email, role }),
++        body: JSON.stringify({
++          displayName,
++          email,
++          role,
++          managedArtistIds: role === 'manager' ? managedArtistIds : undefined,
++        }),
+       })
+       const data = await res.json() as { error?: string; tempPin?: string; emailWarning?: string }
+       if (!res.ok) {
+@@ -35,6 +52,7 @@ export default function InviteUserForm({ open, onClose, onSuccess }: InviteUserF
+       setDisplayName('')
+       setEmail('')
+       setRole('user')
++      setManagedArtistIds([])
+       onSuccess(data.tempPin!, displayName, data.emailWarning)
+     } finally {
+       setLoading(false)
+@@ -86,15 +104,54 @@ export default function InviteUserForm({ open, onClose, onSuccess }: InviteUserF
+           </label>
+           <select
+             value={role}
+-            onChange={(e) => setRole(e.target.value as UserRole)}
++            onChange={(e) => {
++              const next = e.target.value as UserRole
++              setRole(next)
++              if (next !== 'manager') setManagedArtistIds([])
++            }}
+             className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none"
+             style={inputStyle}
+           >
+             <option value="user">User</option>
++            <option value="manager">Manager</option>
+             <option value="admin">Admin</option>
+           </select>
+         </div>
+ 
++        {role === 'manager' && (
++          <div className="flex flex-col gap-1.5">
++            <label className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
++              Assigned artists (oversight scope)
++            </label>
++            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
++              This manager will only see royalty and reporting data for the artists selected below.
++            </p>
++            <div
++              className="flex flex-col gap-1 max-h-48 overflow-y-auto rounded-lg p-2"
++              style={inputStyle}
++            >
++              {artists.length === 0 && (
++                <p className="text-xs px-2 py-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
++                  No artists found.
++                </p>
++              )}
++              {artists.map((artist) => (
++                <label
++                  key={artist.id}
++                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white cursor-pointer hover:bg-white/5"
++                >
++                  <input
++                    type="checkbox"
++                    checked={managedArtistIds.includes(artist.id)}
++                    onChange={() => toggleArtist(artist.id)}
++                  />
++                  {artist.name}
++                </label>
++              ))}
++            </div>
++          </div>
++        )}
++
+         {error && (
+           <p className="text-sm" style={{ color: 'var(--coral)' }}>
+             {error}
+diff --git a/components/features/settings/ManageAssignmentsModal.tsx b/components/features/settings/ManageAssignmentsModal.tsx
+new file mode 100644
+index 0000000..a57bf27
+--- /dev/null
++++ b/components/features/settings/ManageAssignmentsModal.tsx
+@@ -0,0 +1,115 @@
++'use client'
++
++import { useEffect, useState } from 'react'
++import * as Dialog from '@radix-ui/react-dialog'
++import { X } from 'lucide-react'
++import type { Artist, UserRecord } from '@/lib/types'
++
++interface ManageAssignmentsModalProps {
++  target: UserRecord | null
++  artists: Artist[]
++  onClose: () => void
++  onSave: (userId: string, managedArtistIds: string[]) => Promise<string | undefined>
++}
++
++export default function ManageAssignmentsModal({ target, artists, onClose, onSave }: ManageAssignmentsModalProps) {
++  const [selected, setSelected] = useState<string[]>([])
++  const [saving, setSaving] = useState(false)
++  const [error, setError] = useState<string | null>(null)
++
++  useEffect(() => {
++    setSelected(target?.managedArtistIds ?? [])
++    setError(null)
++  }, [target])
++
++  function toggle(id: string) {
++    setSelected((prev) => (prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]))
++  }
++
++  async function handleSave() {
++    if (!target) return
++    setSaving(true)
++    setError(null)
++    const err = await onSave(target.id, selected)
++    setSaving(false)
++    if (err) setError(err)
++  }
++
++  return (
++    <Dialog.Root open={target !== null} onOpenChange={(open) => { if (!open) onClose() }}>
++      <Dialog.Portal>
++        <Dialog.Overlay className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)' }} />
++        <Dialog.Content
++          className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl p-6 flex flex-col gap-4 outline-none"
++          style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
++        >
++          <div className="flex items-start justify-between gap-3">
++            <div>
++              <Dialog.Title className="text-base font-semibold text-white">
++                Artist assignments
++              </Dialog.Title>
++              <Dialog.Description className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
++                {target?.displayName} will only see royalty and reporting data for the artists selected below.
++              </Dialog.Description>
++            </div>
++            <Dialog.Close asChild>
++              <button
++                className="rounded-md p-1 transition-opacity hover:opacity-60 flex-shrink-0"
++                style={{ color: 'rgba(255,255,255,0.4)' }}
++                aria-label="Close"
++              >
++                <X size={14} />
++              </button>
++            </Dialog.Close>
++          </div>
++
++          <div
++            className="flex flex-col gap-1 max-h-56 overflow-y-auto rounded-lg p-2"
++            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
++          >
++            {artists.length === 0 && (
++              <p className="text-xs px-2 py-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
++                No artists found.
++              </p>
++            )}
++            {artists.map((artist) => (
++              <label
++                key={artist.id}
++                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white cursor-pointer hover:bg-white/5"
++              >
++                <input
++                  type="checkbox"
++                  checked={selected.includes(artist.id)}
++                  onChange={() => toggle(artist.id)}
++                />
++                {artist.name}
++              </label>
++            ))}
++          </div>
++
++          {error && (
++            <p className="text-sm" style={{ color: 'var(--coral)' }}>{error}</p>
++          )}
++
++          <div className="flex justify-end gap-3 pt-1">
++            <button
++              onClick={onClose}
++              className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-75"
++              style={{ background: 'var(--surface-2)', color: 'rgba(255,255,255,0.6)', border: '1px solid var(--border)' }}
++            >
++              Cancel
++            </button>
++            <button
++              onClick={handleSave}
++              disabled={saving}
++              className="rounded-lg px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40 hover:opacity-85"
++              style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
++            >
++              {saving ? 'Saving…' : 'Save assignments'}
++            </button>
++          </div>
++        </Dialog.Content>
++      </Dialog.Portal>
++    </Dialog.Root>
++  )
++}
+diff --git a/components/features/settings/UserList.tsx b/components/features/settings/UserList.tsx
+index 68c0bb3..ddbcb1e 100644
+--- a/components/features/settings/UserList.tsx
++++ b/components/features/settings/UserList.tsx
+@@ -12,6 +12,7 @@ interface UserListProps {
+   onDeactivate: (userId: string) => Promise<string | undefined>
+   onReactivate: (userId: string) => Promise<string | undefined>
+   onResetPin: (userId: string) => void
++  onEditAssignments: (user: UserRecord) => void
+   loadingId: string | null
+ }
+ 
+@@ -43,7 +44,7 @@ function StatusBadge({ status }: { status: UserRecord['status'] }) {
+ }
+ 
+ function RoleBadge({ role }: { role: UserRecord['role'] }) {
+-  const elevated = role === 'owner' || role === 'admin'
++  const elevated = role === 'owner' || role === 'admin' || role === 'manager'
+   return (
+     <span
+       className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+@@ -118,6 +119,7 @@ function RowActions({
+   onDeactivate,
+   onReactivate,
+   onResetPin,
++  onEditAssignments,
+   loadingId,
+   size,
+ }: {
+@@ -127,6 +129,7 @@ function RowActions({
+   onDeactivate: (id: string) => Promise<string | undefined>
+   onReactivate: (id: string) => Promise<string | undefined>
+   onResetPin: (id: string) => void
++  onEditAssignments: (user: UserRecord) => void
+   loadingId: string | null
+   size: 'sm' | 'xs'
+ }) {
+@@ -134,8 +137,9 @@ function RowActions({
+   const [modalOpen, setModalOpen] = useState(false)
+   const action = getRowActions(user, callerRole, currentUserId)
+   const showResetPin = isOwner(callerRole) && user.id !== currentUserId && user.role !== 'owner'
++  const showEditAssignments = isAdminOrAbove(callerRole) && user.role === 'manager'
+ 
+-  if (action === 'none' && !showResetPin) return null
++  if (action === 'none' && !showResetPin && !showEditAssignments) return null
+ 
+   const px = size === 'sm' ? 'px-3 py-1.5' : 'px-3 py-1'
+ 
+@@ -194,6 +198,16 @@ function RowActions({
+             Reset PIN
+           </button>
+         )}
++        {showEditAssignments && (
++          <button
++            onClick={() => onEditAssignments(user)}
++            disabled={loadingId === user.id}
++            className={`rounded-lg ${px} text-xs font-medium transition-opacity disabled:opacity-40`}
++            style={{ border: '1px solid var(--accent)', color: 'var(--accent)', background: 'transparent' }}
++          >
++            Edit assignments
++          </button>
++        )}
+       </div>
+       {rowError && (
+         <p className="text-[11px]" style={{ color: 'var(--coral)' }}>{rowError}</p>
+@@ -202,7 +216,7 @@ function RowActions({
+   )
+ }
+ 
+-export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, onResetPin, loadingId }: UserListProps) {
++export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, onResetPin, onEditAssignments, loadingId }: UserListProps) {
+   const [showInactive, setShowInactive] = useState(false)
+ 
+   const displayedUsers = showInactive ? users : users.filter((u) => u.status !== 'inactive')
+@@ -259,6 +273,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
+               onDeactivate={onDeactivate}
+               onReactivate={onReactivate}
+               onResetPin={onResetPin}
++              onEditAssignments={onEditAssignments}
+               loadingId={loadingId}
+               size="sm"
+             />
+@@ -316,6 +331,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
+                       onDeactivate={onDeactivate}
+                       onReactivate={onReactivate}
+                       onResetPin={onResetPin}
++                      onEditAssignments={onEditAssignments}
+                       loadingId={loadingId}
+                       size="xs"
+                     />
+diff --git a/components/features/settings/UsersClient.tsx b/components/features/settings/UsersClient.tsx
+index 9505ef6..afde525 100644
+--- a/components/features/settings/UsersClient.tsx
++++ b/components/features/settings/UsersClient.tsx
+@@ -3,9 +3,10 @@
+ import { useEffect, useState, useCallback, useRef } from 'react'
+ import * as Dialog from '@radix-ui/react-dialog'
+ import { UserPlus, X, AlertTriangle } from 'lucide-react'
+-import type { UserRecord, UserRole } from '@/lib/types'
++import type { Artist, UserRecord, UserRole } from '@/lib/types'
+ import UserList from '@/components/features/settings/UserList'
+ import InviteUserForm from '@/components/features/settings/InviteUserForm'
++import ManageAssignmentsModal from '@/components/features/settings/ManageAssignmentsModal'
+ import PinShare from '@/components/shared/PinShare'
+ import { deactivateUser, reactivateUser } from '@/app/actions/users'
+ 
+@@ -23,9 +24,10 @@ interface Toast {
+ interface UsersClientProps {
+   currentUserId: string
+   callerRole: UserRole
++  artists: Artist[]
+ }
+ 
+-export default function UsersClient({ currentUserId, callerRole }: UsersClientProps) {
++export default function UsersClient({ currentUserId, callerRole, artists }: UsersClientProps) {
+   const [users, setUsers] = useState<UserRecord[]>([])
+   const [loading, setLoading] = useState(true)
+   const [loadingId, setLoadingId] = useState<string | null>(null)
+@@ -45,6 +47,9 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
+   const [revealedPin, setRevealedPin] = useState('')
+   const [pinRevealTarget, setPinRevealTarget] = useState<UserRecord | null>(null)
+ 
++  // Manager artist-assignment modal
++  const [assignmentsTarget, setAssignmentsTarget] = useState<UserRecord | null>(null)
++
+   function showToast(message: string, type: 'success' | 'error') {
+     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+     setToast({ message, type })
+@@ -134,6 +139,25 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
+     }
+   }
+ 
++  async function handleAssignmentsSave(userId: string, ids: string[]): Promise<string | undefined> {
++    try {
++      const res = await fetch('/api/admin/update-assignments', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ userId, managedArtistIds: ids }),
++      })
++      const data = await res.json() as { ok?: boolean; error?: string }
++      if (!res.ok) return data.error ?? 'Failed to update assignments.'
++      setUsers((prev) =>
++        prev.map((u) => u.id === userId ? { ...u, managedArtistIds: ids } : u)
++      )
++      showToast('Artist assignments updated.', 'success')
++      setAssignmentsTarget(null)
++    } catch {
++      return 'Failed to update assignments.'
++    }
++  }
++
+   function handleInviteSuccess(pin: string, displayName: string, emailWarning?: string) {
+     setShowInvite(false)
+     setTempPin({ pin, displayName, emailWarning })
+@@ -205,6 +229,7 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
+           onDeactivate={handleDeactivate}
+           onReactivate={handleReactivate}
+           onResetPin={handleResetPinClick}
++          onEditAssignments={setAssignmentsTarget}
+           loadingId={loadingId}
+         />
+       )}
+@@ -213,6 +238,14 @@ export default function UsersClient({ currentUserId, callerRole }: UsersClientPr
+         open={showInvite}
+         onClose={() => setShowInvite(false)}
+         onSuccess={handleInviteSuccess}
++        artists={artists}
++      />
++
++      <ManageAssignmentsModal
++        target={assignmentsTarget}
++        artists={artists}
++        onClose={() => setAssignmentsTarget(null)}
++        onSave={handleAssignmentsSave}
+       />
+ 
+       {/* Reset PIN — confirmation modal */}
+diff --git a/components/layout/Sidebar.tsx b/components/layout/Sidebar.tsx
+index f92ae70..312da0d 100644
+--- a/components/layout/Sidebar.tsx
++++ b/components/layout/Sidebar.tsx
+@@ -5,13 +5,13 @@ import { usePathname, useRouter } from 'next/navigation'
+ import * as Dialog from '@radix-ui/react-dialog'
+ import { LayoutGrid, Users, Disc3, Banknote, Radio, BarChart3, Settings, LogOut, X, Users2 } from 'lucide-react'
+ import { createClient } from '@/lib/supabase/client'
+-import { isAdminOrAbove } from '@/lib/utils'
++import { isAdminOrAbove, isManagerOrAbove } from '@/lib/utils'
+ 
+ const MAIN_NAV = [
+   { href: '/', label: 'Dashboard', Icon: LayoutGrid },
+   { href: '/artists', label: 'Artists', Icon: Users },
+   { href: '/releases', label: 'Releases', Icon: Disc3 },
+-  { href: '/royalties', label: 'Royalties', Icon: Banknote },
++  { href: '/royalties', label: 'Royalties', Icon: Banknote, visible: isManagerOrAbove },
+   { href: '/distribution', label: 'Distribution', Icon: Radio },
+   { href: '/analytics', label: 'Analytics', Icon: BarChart3 },
+   { href: '/settings', label: 'Settings', Icon: Settings },
+@@ -86,7 +86,7 @@ export default function Sidebar({ open, onOpenChange, role }: SidebarProps) {
+   function NavContent({ onNavClick }: { onNavClick?: () => void }) {
+     return (
+       <nav className="flex flex-col gap-1 px-3 pt-2 pb-4">
+-        {MAIN_NAV.map(({ href, label, Icon }) => (
++        {MAIN_NAV.filter(({ visible }) => !visible || visible(role)).map(({ href, label, Icon }) => (
+           <NavLink
+             key={href}
+             href={href}
+diff --git a/lib/types.ts b/lib/types.ts
+index 127473e..9a2c7b3 100644
+--- a/lib/types.ts
++++ b/lib/types.ts
+@@ -1,8 +1,10 @@
+-// Role hierarchy: owner > admin > user
++// Role hierarchy: owner > admin > manager > user
+ // owner: elevated permissions, SQL-promoted only, never via invite form
+ // admin: standard management permissions, invite-form assignable
++// manager: oversight/reporting permissions scoped to assigned artists, invite-form assignable
++//          (no user-management access — cannot invite, deactivate, reactivate, or reset PINs)
+ // user: base access level, invite-form assignable
+-export type UserRole = 'owner' | 'admin' | 'user'
++export type UserRole = 'owner' | 'admin' | 'manager' | 'user'
+ 
+ export interface UserRecord {
+   id: string
+@@ -12,6 +14,8 @@ export interface UserRecord {
+   status: 'active' | 'inactive'
+   createdAt: string
+   lastSignInAt?: string
++  // Artist IDs this user has scoped oversight over. Only meaningful for role === 'manager'.
++  managedArtistIds?: string[]
+ }
+ 
+ export interface AppUser {
+@@ -21,6 +25,8 @@ export interface AppUser {
+   displayName: string
+   artistId?: string
+   createdAt: string
++  // Artist IDs this user has scoped oversight over. Only meaningful for role === 'manager'.
++  managedArtistIds?: string[]
+ }
+ 
+ export interface Artist {
+diff --git a/lib/utils.ts b/lib/utils.ts
+index 26d3669..1ae4b6e 100644
+--- a/lib/utils.ts
++++ b/lib/utils.ts
+@@ -30,6 +30,13 @@ export function isAdminOrAbove(role?: string): boolean {
+   return role === 'owner' || role === 'admin'
+ }
+ 
++// Owner, admin, or manager — used for gating financial/royalty oversight views.
++// Note: this is intentionally separate from isAdminOrAbove, which gates user-management
++// actions (invite/deactivate/reactivate/reset PIN). Managers never pass isAdminOrAbove.
++export function isManagerOrAbove(role?: string): boolean {
++  return role === 'owner' || role === 'admin' || role === 'manager'
++}
++
+ export function isOwner(role?: string): boolean {
+   return role === 'owner'
+ }
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+new file mode 100644
+index 0000000..a2a1883
+--- /dev/null
++++ b/pnpm-workspace.yaml
+@@ -0,0 +1,3 @@
++allowBuilds:
++  sharp: set this to true or false
++  unrs-resolver: set this to true or false
+diff --git a/proxy.ts b/proxy.ts
+index b1d0889..b1b50a5 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -1,6 +1,6 @@
+ import { NextResponse, type NextRequest } from 'next/server'
+ import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
+-import { isAdminOrAbove } from '@/lib/utils'
++import { isAdminOrAbove, isManagerOrAbove } from '@/lib/utils'
+ 
+ const PUBLIC_PATHS = [
+   '/login',
+@@ -66,6 +66,10 @@ export async function proxy(request: NextRequest) {
+     return NextResponse.redirect(new URL('/', request.url))
+   }
+ 
++  if (pathname.startsWith('/royalties') && !isManagerOrAbove(meta?.role)) {
++    return NextResponse.redirect(new URL('/', request.url))
++  }
++
+   return response
+ }
+ 
