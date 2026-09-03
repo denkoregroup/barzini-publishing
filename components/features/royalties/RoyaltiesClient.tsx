@@ -23,6 +23,14 @@ interface Props {
   statements: RoyaltyStatement[]
   artists: Artist[]
   releases: Release[]
+  // buildScopedSummary() doesn't bucket statements by date at all (the mock
+  // RoyaltyStatement data just carries a fixed periodStart/periodEnd, and
+  // `days` is only echoed into periodDays, never used to filter) — so for a
+  // manager-scoped viewer, 30D/90D/1Y are currently identical numbers.
+  // Rather than show pills that don't do anything, hide the extras and stay
+  // on 30D. Non-manager summaries genuinely differ per period, so they keep
+  // all three.
+  managerScoped?: boolean
 }
 
 export default function RoyaltiesClient({
@@ -32,11 +40,13 @@ export default function RoyaltiesClient({
   statements,
   artists,
   releases,
+  managerScoped = false,
 }: Props) {
-  const [activePeriod, setActivePeriod] = useState<Period>(90)
+  const [activePeriod, setActivePeriod] = useState<Period>(30)
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null)
 
   const summary = activePeriod === 30 ? summary30 : activePeriod === 365 ? summary365 : summary90
+  const visiblePills = managerScoped ? PERIOD_PILLS.filter((p) => p.days === 30) : PERIOD_PILLS
 
   function handleArtistClick(artistId: string) {
     const match = artists.find((a) => a.id === artistId)
@@ -49,9 +59,11 @@ export default function RoyaltiesClient({
 
   return (
     <>
-      {/* Period pills */}
+      {/* Period pills — hidden entirely for manager-scoped viewers, since there's
+          only one meaningful period (see managerScoped prop doc above) */}
+      {visiblePills.length > 1 && (
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-        {PERIOD_PILLS.map(({ label, days }) => {
+        {visiblePills.map(({ label, days }) => {
           const active = activePeriod === days
           return (
             <button
@@ -71,6 +83,7 @@ export default function RoyaltiesClient({
           )
         })}
       </div>
+      )}
 
       <SummaryStrip summary={summary} />
 

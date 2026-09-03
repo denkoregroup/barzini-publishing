@@ -66,25 +66,30 @@ export default function ArtistSwitcher({ artists, selectedArtistId }: ArtistSwit
         >
           All
         </Link>
-        {artists.map((a) => (
-          <Link
-            key={a.id}
-            href={hrefFor(a.id)}
-            className="flex items-center gap-1.5 rounded-full pl-1.5 pr-3 py-1 text-xs font-semibold flex-shrink-0 transition-colors"
-            style={pillStyle(active === a.id)}
-          >
-            <span
-              className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold flex-shrink-0"
-              style={{
-                background: 'color-mix(in oklch, var(--primary) 20%, transparent)',
-                color: 'var(--primary)',
-              }}
+        {artists.map((a) => {
+          const isActive = active === a.id
+          // Clicking the already-active artist again deselects it, back to "All" —
+          // rather than re-navigating to the same artist it's already showing.
+          return (
+            <Link
+              key={a.id}
+              href={hrefFor(isActive ? 'all' : a.id)}
+              className="flex items-center gap-1.5 rounded-full pl-1.5 pr-3 py-1 text-xs font-semibold flex-shrink-0 transition-colors"
+              style={pillStyle(isActive)}
             >
-              {a.initials}
-            </span>
-            {a.name}
-          </Link>
-        ))}
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold flex-shrink-0"
+                style={{
+                  background: 'color-mix(in oklch, var(--primary) 20%, transparent)',
+                  color: 'var(--primary)',
+                }}
+              >
+                {a.initials}
+              </span>
+              {a.name}
+            </Link>
+          )
+        })}
       </div>
     </div>
   )

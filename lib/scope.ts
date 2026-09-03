@@ -114,3 +114,22 @@ export function buildScopedSummary(
     topArtists,
   }
 }
+
+// Sums a set of per-release PlatformRevenue[] breakdowns (e.g. from
+// getReleaseInsight) into one platform-keyed array, for a manager-scoped
+// Analytics view where there's no label-wide getAnalyticsStreams()
+// equivalent to call. Note this has no date dimension — ReleaseInsight is an
+// all-time cumulative figure — so it can't be bucketed by period the way the
+// label-wide analytics mock data is.
+export function mergePlatformRevenue(breakdowns: PlatformRevenue[][]): PlatformRevenue[] {
+  const platformMap = new Map<string, PlatformRevenue>()
+  for (const breakdown of breakdowns) {
+    for (const p of breakdown) {
+      const cur = platformMap.get(p.platform) ?? { platform: p.platform, revenue: 0, streams: 0 }
+      cur.revenue += p.revenue
+      cur.streams += p.streams
+      platformMap.set(p.platform, cur)
+    }
+  }
+  return [...platformMap.values()]
+}

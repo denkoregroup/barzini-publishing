@@ -70,6 +70,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
+  if (pathname.startsWith('/distribution') && !isAdminOrAbove(meta?.role)) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
   return response
 }
 

@@ -78,6 +78,7 @@ export default async function RoyaltiesPage({ searchParams }: RoyaltiesPageProps
         statements={statements}
         artists={artists}
         releases={releases}
+        managerScoped={ctx.managerScoped}
       />
     </div>
   )

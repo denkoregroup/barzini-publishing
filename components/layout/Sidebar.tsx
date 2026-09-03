@@ -12,7 +12,7 @@ const MAIN_NAV = [
   { href: '/artists', label: 'Artists', Icon: Users },
   { href: '/releases', label: 'Releases', Icon: Disc3 },
   { href: '/royalties', label: 'Royalties', Icon: Banknote, visible: isManagerOrAbove },
-  { href: '/distribution', label: 'Distribution', Icon: Radio },
+  { href: '/distribution', label: 'Distribution', Icon: Radio, visible: isAdminOrAbove },
   { href: '/analytics', label: 'Analytics', Icon: BarChart3 },
   { href: '/settings', label: 'Settings', Icon: Settings },
 ]

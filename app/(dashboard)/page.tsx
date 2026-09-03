@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getDisplayName } from '@/lib/utils'
 import type { RoyaltySummary } from '@/lib/types'
 import { getRoyaltySummary, getReleases, getDistributionStatus, getArtists, getRoyaltyStatements } from '@/lib/labelgrid'
+import { isAdminOrAbove } from '@/lib/utils'
 import {
   getScopeContext,
   scopeArtists,
@@ -29,10 +30,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     : null
 
   const ctx = await getScopeContext()
+  const isAdmin = isAdminOrAbove(ctx.role)
 
   const [allReleases, channels, allArtists, allStatements] = await Promise.all([
     getReleases(),
-    getDistributionStatus(),
+    // Distribution is admin/owner-only now — skip fetching it for anyone else.
+    isAdmin ? getDistributionStatus() : Promise.resolve([]),
     getArtists(),
     // Only needed to build a manager-scoped summary; skip the label-wide call below when scoped.
     ctx.managerScoped ? getRoyaltyStatements() : Promise.resolve([]),
@@ -47,8 +50,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const statements = scopeToSelectedByArtistId(managedStatements, ctx.managerScoped ? selectedArtistId : undefined)
 
   const summary: RoyaltySummary = ctx.managerScoped
-    ? buildScopedSummary(statements, artists, 90)
-    : await getRoyaltySummary(90)
+    ? buildScopedSummary(statements, artists, 30)
+    : await getRoyaltySummary(30)
 
   return (
     <div className="flex flex-col gap-6 min-w-0">
@@ -70,6 +73,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         releases={releases}
         channels={channels}
         artists={artists}
+        showDistribution={isAdmin}
       />
     </div>
   )
