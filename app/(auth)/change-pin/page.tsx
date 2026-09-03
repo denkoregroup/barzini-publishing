@@ -1,10 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 export default function ChangePinPage() {
-  const router = useRouter()
   const [pin, setPin] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -36,8 +34,13 @@ export default function ChangePinPage() {
         setError(data.error ?? 'Something went wrong.')
         return
       }
-      router.push('/')
-      router.refresh()
+      // Hard navigation, not router.push/refresh: the PIN update just wrote fresh
+      // session cookies (pin_set/force_pin_change) onto this fetch's response.
+      // A client-side transition can race that write and get bounced right back
+      // here by proxy.ts's force_pin_change check. A full page load guarantees
+      // the next request to '/' carries the cookies that were just set.
+      window.location.href = '/'
+      return
     } finally {
       setLoading(false)
     }

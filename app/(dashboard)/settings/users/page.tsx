@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { isAdminOrAbove } from '@/lib/utils'
 import { type UserRole } from '@/lib/types'
+import { getArtists } from '@/lib/labelgrid'
 import UsersClient from '@/components/features/settings/UsersClient'
 
 export default async function UsersPage() {
@@ -12,6 +13,8 @@ export default async function UsersPage() {
   if (!user || !isAdminOrAbove(role)) {
     redirect('/')
   }
+
+  const artists = await getArtists()
 
   return (
     <div className="flex flex-col gap-6 min-w-0">
@@ -25,7 +28,7 @@ export default async function UsersPage() {
         <h1 className="mt-1 text-2xl font-semibold text-white">User management</h1>
       </div>
 
-      <UsersClient currentUserId={user.id} callerRole={role as UserRole} />
+      <UsersClient currentUserId={user.id} callerRole={role as UserRole} artists={artists} />
     </div>
   )
 }

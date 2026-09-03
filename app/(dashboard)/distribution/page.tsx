@@ -1,7 +1,19 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { isAdminOrAbove } from '@/lib/utils'
 import { getDistributionStatus, getSyncEvents } from '@/lib/labelgrid'
 import DistributionClient from '@/components/features/distribution/DistributionClient'
 
 export default async function DistributionPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const role = user?.user_metadata?.role as string | undefined
+
+  // Defense in depth — proxy.ts already blocks non-admin/owner roles from this route.
+  if (!isAdminOrAbove(role)) {
+    redirect('/')
+  }
+
   const [channels, events] = await Promise.all([getDistributionStatus(), getSyncEvents()])
 
   return (

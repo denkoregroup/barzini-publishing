@@ -1,9 +1,25 @@
 import { createClient } from '@/lib/supabase/server'
 import { getDisplayName } from '@/lib/utils'
-import { getRoyaltySummary, getReleases, getDistributionStatus, getArtists } from '@/lib/labelgrid'
+import type { RoyaltySummary } from '@/lib/types'
+import { getRoyaltySummary, getReleases, getDistributionStatus, getArtists, getRoyaltyStatements } from '@/lib/labelgrid'
+import { isAdminOrAbove } from '@/lib/utils'
+import {
+  getScopeContext,
+  scopeArtists,
+  scopeByArtistId,
+  scopeToSelected,
+  scopeToSelectedByArtistId,
+  buildScopedSummary,
+} from '@/lib/scope'
+import ArtistSwitcher from '@/components/features/shared/ArtistSwitcher'
 import DashboardOverview from '@/components/features/dashboard/DashboardOverview'
 
-export default async function DashboardPage() {
+interface DashboardPageProps {
+  searchParams: Promise<{ artist?: string }>
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const { artist: selectedArtistId } = await searchParams
   const supabase = await createClient()
   const {
     data: { user },
@@ -13,12 +29,29 @@ export default async function DashboardPage() {
     ? getDisplayName({ email: user.email ?? undefined, user_metadata: user.user_metadata })
     : null
 
-  const [summary, releases, channels, artists] = await Promise.all([
-    getRoyaltySummary(90),
+  const ctx = await getScopeContext()
+  const isAdmin = isAdminOrAbove(ctx.role)
+
+  const [allReleases, channels, allArtists, allStatements] = await Promise.all([
     getReleases(),
-    getDistributionStatus(),
+    // Distribution is admin/owner-only now — skip fetching it for anyone else.
+    isAdmin ? getDistributionStatus() : Promise.resolve([]),
     getArtists(),
+    // Only needed to build a manager-scoped summary; skip the label-wide call below when scoped.
+    ctx.managerScoped ? getRoyaltyStatements() : Promise.resolve([]),
   ])
+
+  const managedArtists = scopeArtists(allArtists, ctx)
+  const managedReleases = scopeByArtistId(allReleases, ctx)
+  const managedStatements = scopeByArtistId(allStatements, ctx)
+
+  const artists = scopeToSelected(managedArtists, ctx.managerScoped ? selectedArtistId : undefined)
+  const releases = scopeToSelectedByArtistId(managedReleases, ctx.managerScoped ? selectedArtistId : undefined)
+  const statements = scopeToSelectedByArtistId(managedStatements, ctx.managerScoped ? selectedArtistId : undefined)
+
+  const summary: RoyaltySummary = ctx.managerScoped
+    ? buildScopedSummary(statements, artists, 30)
+    : await getRoyaltySummary(30)
 
   return (
     <div className="flex flex-col gap-6 min-w-0">
@@ -31,11 +64,16 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {ctx.managerScoped && (
+        <ArtistSwitcher artists={managedArtists} selectedArtistId={selectedArtistId} />
+      )}
+
       <DashboardOverview
         summary={summary}
         releases={releases}
         channels={channels}
         artists={artists}
+        showDistribution={isAdmin}
       />
     </div>
   )

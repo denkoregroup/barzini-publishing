@@ -12,6 +12,7 @@ interface UserListProps {
   onDeactivate: (userId: string) => Promise<string | undefined>
   onReactivate: (userId: string) => Promise<string | undefined>
   onResetPin: (userId: string) => void
+  onEditAssignments: (user: UserRecord) => void
   loadingId: string | null
 }
 
@@ -43,7 +44,7 @@ function StatusBadge({ status }: { status: UserRecord['status'] }) {
 }
 
 function RoleBadge({ role }: { role: UserRecord['role'] }) {
-  const elevated = role === 'owner' || role === 'admin'
+  const elevated = role === 'owner' || role === 'admin' || role === 'manager'
   return (
     <span
       className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
@@ -118,6 +119,7 @@ function RowActions({
   onDeactivate,
   onReactivate,
   onResetPin,
+  onEditAssignments,
   loadingId,
   size,
 }: {
@@ -127,6 +129,7 @@ function RowActions({
   onDeactivate: (id: string) => Promise<string | undefined>
   onReactivate: (id: string) => Promise<string | undefined>
   onResetPin: (id: string) => void
+  onEditAssignments: (user: UserRecord) => void
   loadingId: string | null
   size: 'sm' | 'xs'
 }) {
@@ -134,8 +137,9 @@ function RowActions({
   const [modalOpen, setModalOpen] = useState(false)
   const action = getRowActions(user, callerRole, currentUserId)
   const showResetPin = isOwner(callerRole) && user.id !== currentUserId && user.role !== 'owner'
+  const showEditAssignments = isAdminOrAbove(callerRole) && user.role === 'manager'
 
-  if (action === 'none' && !showResetPin) return null
+  if (action === 'none' && !showResetPin && !showEditAssignments) return null
 
   const px = size === 'sm' ? 'px-3 py-1.5' : 'px-3 py-1'
 
@@ -194,6 +198,16 @@ function RowActions({
             Reset PIN
           </button>
         )}
+        {showEditAssignments && (
+          <button
+            onClick={() => onEditAssignments(user)}
+            disabled={loadingId === user.id}
+            className={`rounded-lg ${px} text-xs font-medium transition-opacity disabled:opacity-40`}
+            style={{ border: '1px solid var(--accent)', color: 'var(--accent)', background: 'transparent' }}
+          >
+            Edit assignments
+          </button>
+        )}
       </div>
       {rowError && (
         <p className="text-[11px]" style={{ color: 'var(--coral)' }}>{rowError}</p>
@@ -202,7 +216,7 @@ function RowActions({
   )
 }
 
-export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, onResetPin, loadingId }: UserListProps) {
+export default function UserList({ users, currentUserId, callerRole, onDeactivate, onReactivate, onResetPin, onEditAssignments, loadingId }: UserListProps) {
   const [showInactive, setShowInactive] = useState(false)
 
   const displayedUsers = showInactive ? users : users.filter((u) => u.status !== 'inactive')
@@ -259,6 +273,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
               onDeactivate={onDeactivate}
               onReactivate={onReactivate}
               onResetPin={onResetPin}
+              onEditAssignments={onEditAssignments}
               loadingId={loadingId}
               size="sm"
             />
@@ -316,6 +331,7 @@ export default function UserList({ users, currentUserId, callerRole, onDeactivat
                       onDeactivate={onDeactivate}
                       onReactivate={onReactivate}
                       onResetPin={onResetPin}
+                      onEditAssignments={onEditAssignments}
                       loadingId={loadingId}
                       size="xs"
                     />

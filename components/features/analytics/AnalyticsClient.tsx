@@ -19,19 +19,37 @@ const PILLS: { label: PeriodLabel; days: Period }[] = [
 interface Timeseries { date: string; streams: number }
 
 interface Props {
-  streams30: PlatformRevenue[]
-  streams90: PlatformRevenue[]
-  streams365: PlatformRevenue[]
-  timeseries30: Timeseries[]
-  timeseries90: Timeseries[]
-  timeseries365: Timeseries[]
+  // Manager-scoped: only a merged, period-invariant PlatformRevenue[] is
+  // available (built from each assigned artist's releases via
+  // getReleaseInsight, which has no date dimension) — no daily timeseries
+  // exists at the artist level, so the chart and period pills don't apply.
+  managerScoped?: boolean
+  scopedPlatforms?: PlatformRevenue[]
+  // Label-wide (admin/owner): genuinely differs per period, all provided up front.
+  streams30?: PlatformRevenue[]
+  streams90?: PlatformRevenue[]
+  streams365?: PlatformRevenue[]
+  timeseries30?: Timeseries[]
+  timeseries90?: Timeseries[]
+  timeseries365?: Timeseries[]
 }
 
 export default function AnalyticsClient({
-  streams30, streams90, streams365,
-  timeseries30, timeseries90, timeseries365,
+  managerScoped = false,
+  scopedPlatforms = [],
+  streams30 = [], streams90 = [], streams365 = [],
+  timeseries30 = [], timeseries90 = [], timeseries365 = [],
 }: Props) {
-  const [activeLabel, setActiveLabel] = useState<PeriodLabel>('90d')
+  const [activeLabel, setActiveLabel] = useState<PeriodLabel>('30d')
+
+  if (managerScoped) {
+    return (
+      <>
+        <AnalyticsSummary platforms={scopedPlatforms} timeseries={[]} />
+        <PlatformRevenueTable platforms={scopedPlatforms} />
+      </>
+    )
+  }
 
   const activeDays: Period =
     activeLabel === '30d' ? 30 : activeLabel === '90d' ? 90 : 365

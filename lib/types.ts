@@ -1,8 +1,10 @@
-// Role hierarchy: owner > admin > user
+// Role hierarchy: owner > admin > manager > user
 // owner: elevated permissions, SQL-promoted only, never via invite form
 // admin: standard management permissions, invite-form assignable
+// manager: oversight/reporting permissions scoped to assigned artists, invite-form assignable
+//          (no user-management access — cannot invite, deactivate, reactivate, or reset PINs)
 // user: base access level, invite-form assignable
-export type UserRole = 'owner' | 'admin' | 'user'
+export type UserRole = 'owner' | 'admin' | 'manager' | 'user'
 
 export interface UserRecord {
   id: string
@@ -12,6 +14,8 @@ export interface UserRecord {
   status: 'active' | 'inactive'
   createdAt: string
   lastSignInAt?: string
+  // Artist IDs this user has scoped oversight over. Only meaningful for role === 'manager'.
+  managedArtistIds?: string[]
 }
 
 export interface AppUser {
@@ -21,6 +25,8 @@ export interface AppUser {
   displayName: string
   artistId?: string
   createdAt: string
+  // Artist IDs this user has scoped oversight over. Only meaningful for role === 'manager'.
+  managedArtistIds?: string[]
 }
 
 export interface Artist {

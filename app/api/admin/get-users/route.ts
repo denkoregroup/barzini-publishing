@@ -33,6 +33,7 @@ export async function GET() {
       status,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at ?? undefined,
+      managedArtistIds: Array.isArray(meta.managed_artist_ids) ? meta.managed_artist_ids : undefined,
     }
   })
 

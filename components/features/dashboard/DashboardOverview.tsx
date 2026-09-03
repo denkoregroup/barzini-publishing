@@ -40,9 +40,12 @@ interface Props {
   releases: Release[]
   channels: DistributionChannel[]
   artists: Artist[]
+  // Distribution is admin/owner-only now. Defaults true so any other caller
+  // doesn't silently lose the card.
+  showDistribution?: boolean
 }
 
-export default function DashboardOverview({ summary, releases, channels, artists }: Props) {
+export default function DashboardOverview({ summary, releases, channels, artists, showDistribution = true }: Props) {
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null)
 
   const liveReleases = releases.filter((r) => r.status === 'live').length
@@ -100,7 +103,7 @@ export default function DashboardOverview({ summary, releases, channels, artists
       </div>
 
       {/* Recent releases + distribution snapshot */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] xl:grid-cols-[1.5fr_1fr] gap-4 min-w-0">
+      <div className={`grid grid-cols-1 gap-4 min-w-0 ${showDistribution ? 'lg:grid-cols-[1.4fr_1fr] xl:grid-cols-[1.5fr_1fr]' : ''}`}>
         {/* Recent releases */}
         <div
           className="rounded-xl overflow-hidden flex flex-col min-w-0"
@@ -133,7 +136,8 @@ export default function DashboardOverview({ summary, releases, channels, artists
           </div>
         </div>
 
-        {/* Distribution snapshot */}
+        {/* Distribution snapshot — admin/owner only */}
+        {showDistribution && (
         <div
           className="rounded-xl overflow-hidden flex flex-col min-w-0"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
@@ -189,6 +193,7 @@ export default function DashboardOverview({ summary, releases, channels, artists
             )}
           </div>
         </div>
+        )}
       </div>
 
       {selectedRelease && (

@@ -5,14 +5,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { LayoutGrid, Users, Disc3, Banknote, Radio, BarChart3, Settings, LogOut, X, Users2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { isAdminOrAbove } from '@/lib/utils'
+import { isAdminOrAbove, isManagerOrAbove } from '@/lib/utils'
 
 const MAIN_NAV = [
   { href: '/', label: 'Dashboard', Icon: LayoutGrid },
   { href: '/artists', label: 'Artists', Icon: Users },
   { href: '/releases', label: 'Releases', Icon: Disc3 },
-  { href: '/royalties', label: 'Royalties', Icon: Banknote },
-  { href: '/distribution', label: 'Distribution', Icon: Radio },
+  { href: '/royalties', label: 'Royalties', Icon: Banknote, visible: isManagerOrAbove },
+  { href: '/distribution', label: 'Distribution', Icon: Radio, visible: isAdminOrAbove },
   { href: '/analytics', label: 'Analytics', Icon: BarChart3 },
   { href: '/settings', label: 'Settings', Icon: Settings },
 ]
@@ -86,7 +86,7 @@ export default function Sidebar({ open, onOpenChange, role }: SidebarProps) {
   function NavContent({ onNavClick }: { onNavClick?: () => void }) {
     return (
       <nav className="flex flex-col gap-1 px-3 pt-2 pb-4">
-        {MAIN_NAV.map(({ href, label, Icon }) => (
+        {MAIN_NAV.filter(({ visible }) => !visible || visible(role)).map(({ href, label, Icon }) => (
           <NavLink
             key={href}
             href={href}
